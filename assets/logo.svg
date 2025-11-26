@@ -1,0 +1,35 @@
+<svg width="200" height="200" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- 圆角正方形背景（带轻微阴影，提升质感） -->
+  <rect x="15" y="15" width="170" height="170" rx="22" ry="22" fill="white" 
+        stroke="#2A3B4C" stroke-width="2"
+        filter="drop-shadow(0 2px 3px rgba(0,0,0,0.08))"/>
+  
+  <!-- 目录层级（带圆角+渐变，更美观） -->
+  <!-- 一级目录（最深色，最长） -->
+  <rect x="40" y="65" width="120" height="16" rx="4" ry="4" 
+        fill="url(#grad1)" stroke="#3B82F6" stroke-width="1"/>
+  
+  <!-- 二级目录（中浅色，缩进+缩短） -->
+  <rect x="60" y="95" width="95" height="16" rx="4" ry="4" 
+        fill="url(#grad2)" stroke="#60A5FA" stroke-width="1"/>
+  
+  <!-- 三级目录（最浅色，进一步缩进+缩短） -->
+  <rect x="80" y="125" width="70" height="16" rx="4" ry="4" 
+        fill="url(#grad3)" stroke="#93C5FD" stroke-width="1"/>
+  
+  <!-- 渐变定义（提升质感，避免单调） -->
+  <defs>
+    <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3B82F6" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#3B82F6" stop-opacity="0.7"/>
+    </linearGradient>
+    <linearGradient id="grad2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#60A5FA" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#60A5FA" stop-opacity="0.7"/>
+    </linearGradient>
+    <linearGradient id="grad3" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#93C5FD" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#93C5FD" stop-opacity="0.7"/>
+    </linearGradient>
+  </defs>
+</svg>

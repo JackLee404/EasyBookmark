@@ -1,0 +1,69 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual Environments
+venv/
+venv_clean/
+env/
+env_clean/
+*.venv/
+.venv/
+
+# Build directories
+build/
+dist/
+build-*
+
+# Spec files for PyInstaller
+*.spec
+
+# IDEs and editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Log files
+logs/
+*.log
+
+# OS generated files
+Thumbs.db
+Thumbs.db:encryptable
+
+# Package files
+*.egg
+*.egg-info/
+build/
+docs/
+dist/
+
+# Coverage reports
+htmlcov/
+.coverage
+.coverage.*
+.pytest_cache/
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# Config files that might contain secrets
+config.json
+
+# Other
+convert_svg_to_ico.py

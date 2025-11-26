@@ -1,0 +1,3 @@
+请将icon.ico文件放在此文件夹中
+Windows平台推荐使用.ico格式图标
+Mac平台推荐使用.icns格式图标
