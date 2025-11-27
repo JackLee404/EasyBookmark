@@ -1,7 +1,6 @@
-
 <div style="text-align: center; margin-bottom: 20px;">
-  <a href="README.en.md" style="padding: 8px 16px; background-color: #f1f1f1; color: #333; text-decoration: none; border-radius: 4px; margin-right: 20px;">English</a>
-  <a href="README.zh.md" style="padding: 8px 16px; background-color: #4CAF50; color: white; text-decoration: none; border-radius: 4px;">中文</a>
+  <a href="README.md" style="padding: 8px 16px; background-color: #4CAF50; color: white; text-decoration: none; border-radius: 4px; margin-right: 20px;">中文</a> |
+  <a href="README.en.md" style="padding: 8px 16px; background-color: #f1f1f1; color: #333; text-decoration: none; border-radius: 4px;">English</a>
 </div>
 
 # EasyBookmark
@@ -10,14 +9,14 @@
   <img src="assets/logo.svg" alt="EasyBookmark Logo" width="200" height="200">
 </div>
 
-如何通过AI添加书签到您的PDF文档？
+如何通过AI给PDF添加目录?
 
-一个强大而易用的PDF处理工具，提供目录提取、内容分析等功能，帮助您更高效地处理PDF文档。
+一个强大而易用的PDF处理工具，提供目录提取和添加书签功能，帮助您更高效地处理PDF文档。
 
 ## 功能特性
 
 - **PDF目录提取**：自动或手动提取PDF文档的目录结构
-- **智能内容分析**：使用LLM（大预言模型）技术分析PDF内容，提取关键信息
+- **智能内容分析**：使用LLM（大语言模型）技术分析PDF内容，提取关键信息
 - **用户友好界面**：直观的图形界面
 - **配置管理**：灵活的配置选项，适应不同用户需求
 
@@ -34,7 +33,7 @@
 1. 克隆或下载本仓库
    ```bash
    git clone https://github.com/JackLee404/EasyBookmark.git
-cd EasyBookmark
+   cd EasyBookmark
    ```
 
 2. 创建虚拟环境（推荐）
@@ -70,7 +69,10 @@ Mac用户：从应用程序文件夹中启动EasyBookmark
 
 - 点击"文件" > "打开"，或使用快捷键`Ctrl+O`（Windows）/`Cmd+O`（Mac）
 - 浏览并选择要处理的PDF文件
-- 输入LLM的API参数
+- 输入LLM的API参数（可选）：
+  - API Base URL
+  - API Key
+  - 模型名称（如`gpt-4o-mini`）
 
 ### 3. 提取目录
 
@@ -108,6 +110,7 @@ PROMPT:
 ```
 
 
+
 - 打开PDF文件后，点击"工具" > "提取目录" > "导入JSON目录"
 - 准备好JSON格式的目录文件（格式参考docs/toc_example.json）
 - 选择JSON文件，程序会验证并显示导入的目录内容
@@ -117,13 +120,7 @@ PROMPT:
   - 编辑目录条目
   - 保存处理后的PDF文件
 
-### 4. 内容分析
-
-- 选择要分析的页面范围
-- 点击"工具" > "内容分析"
-- 等待分析完成后查看结果
-
-### 5. 配置设置
+### 4. 配置设置
 
 - 可以配置以下选项：
   - 默认保存位置
@@ -137,6 +134,7 @@ PROMPT:
 - 页码偏置值用于调整书签的实际页码，正数表示向后偏移，负数表示向前偏移
 - JSON目录文件必须遵循指定格式，包含title、page和level三个字段
 - 导入的目录页码会自动验证是否在PDF有效范围内
+- 支持多模态模型和非多模态模型, 多模态模型会提取图片,非多模态模型则提取文本发送给LLM
 
 ## 配置文件说明
 
@@ -147,6 +145,7 @@ PROMPT:
 - `default_save_path`: 默认保存路径
 - `openai_api_key`: OpenAI API密钥（加密存储）
 - `model_name`: 使用的LLM模型名称
+- `api_base_url`: LLM API的基础URL（如`https://api.openai.com/v1`）
 
 ## 常见问题
 
@@ -158,8 +157,8 @@ PROMPT:
 
 ### 2. 内容分析失败
 
-- 确保已正确配置OpenAI API密钥
-- 检查网络连接是否正常
+- 确保已正确配置符合OpenAI接口规范的LLM API密钥
+- 检查网络连接是否正常, 是否关闭代理
 - 尝试减少分析的页面范围
 
 ### 3. 应用程序崩溃
@@ -230,6 +229,11 @@ python -m src.cli --input document.pdf --output analysis.txt --action analyze --
 - [LangChain](https://www.langchain.com/) - LLM应用框架
 - [OpenAI Python](https://github.com/openai/openai-python) - OpenAI API客户端
 
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=JackLee404/EasyBookmark&type=date&legend=top-left)](https://www.star-history.com/#JackLee404/EasyBookmark&type=date&legend=top-left)
+
 ## 更新日志
 
 ### v1.0.0
@@ -237,3 +241,4 @@ python -m src.cli --input document.pdf --output analysis.txt --action analyze --
 - 支持PDF目录提取
 - 支持内容分析功能
 - 提供图形界面和命令行接口
+

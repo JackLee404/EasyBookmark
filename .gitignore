@@ -50,6 +50,8 @@ Thumbs.db:encryptable
 build/
 docs/
 dist/
+package_app.py
+clean_build.py
 
 # Coverage reports
 htmlcov/
