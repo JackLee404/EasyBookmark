@@ -156,11 +156,16 @@ class TocExtractor:
                         
                         # 从当前页范围提取文本
                         try:
-                            reader = self.PdfReader(pdf_file_path)
+                            # 重用已有的reader如果可能
+                            if hasattr(converter, 'reader') and converter.reader:
+                                reader = converter.reader
+                            else:
+                                reader = self.PdfReader(pdf_file_path)
                             range_texts = []
+                            pages = reader.pages  # 缓存pages引用
                             for page_num in range(start_page - 1, end_page):  # 转换为0基索引并包含结束页
-                                if page_num < len(reader.pages):
-                                    page_text = reader.pages[page_num].extract_text()
+                                if page_num < len(pages):
+                                    page_text = pages[page_num].extract_text()
                                     if page_text:
                                         range_texts.append(f"=== 第{page_num + 1}页 ===\n{page_text}")
                             
@@ -286,13 +291,16 @@ class TocExtractor:
             
             # 初始化完整的目录结果
             full_toc_data = []
+            # 缓存已提取的文本，避免重复提取
+            page_text_cache = {}
+            pages = reader.pages  # 缓存pages引用
             
             # 按顺序处理每个目录页范围
             for idx, (start_page, end_page) in enumerate(page_ranges):
                 logger.info(f"处理目录页范围 {idx+1}/{len(page_ranges)}: 第 {start_page}-{end_page} 页")
                 # 确保页码有效
                 start_page_idx = max(0, start_page - 1)  # 转换为0基索引
-                end_page_idx = min(len(reader.pages) - 1, end_page - 1)
+                end_page_idx = min(len(pages) - 1, end_page - 1)
                 
                 if start_page_idx > end_page_idx:
                     logger.warning(f"无效的页码范围: start={start_page}, end={end_page}")
@@ -301,8 +309,13 @@ class TocExtractor:
                 # 逐页处理每个目录页，类似于图片处理的方式
                 for page_idx in range(start_page_idx, end_page_idx + 1):
                     try:
-                        page = reader.pages[page_idx]
-                        text = page.extract_text()
+                        # 从缓存中获取或提取文本
+                        if page_idx in page_text_cache:
+                            text = page_text_cache[page_idx]
+                        else:
+                            page = pages[page_idx]
+                            text = page.extract_text()
+                            page_text_cache[page_idx] = text
                         
                         if text:
                             logger.info(f"成功提取第{page_idx + 1}页的文本内容，开始使用LLM处理")
@@ -338,16 +351,21 @@ class TocExtractor:
             if not full_toc_data:
                 logger.warning("所有页面LLM处理都未成功提取到目录项，尝试使用简单解析方法")
                 
-                # 重新提取所有页面文本用于备用解析
+                # 使用已缓存的文本，避免重复提取
                 full_toc_text = []
                 for start_page, end_page in page_ranges:
                     start_page_idx = max(0, start_page - 1)
-                    end_page_idx = min(len(reader.pages) - 1, end_page - 1)
+                    end_page_idx = min(len(pages) - 1, end_page - 1)
                     
                     for page_idx in range(start_page_idx, end_page_idx + 1):
                         try:
-                            page = reader.pages[page_idx]
-                            text = page.extract_text()
+                            # 优先使用缓存
+                            if page_idx in page_text_cache:
+                                text = page_text_cache[page_idx]
+                            else:
+                                page = pages[page_idx]
+                                text = page.extract_text()
+                                page_text_cache[page_idx] = text
                             if text:
                                 full_toc_text.append(f"=== 第{page_idx + 1}页 ===\n{text}")
                         except:
@@ -360,19 +378,19 @@ class TocExtractor:
                     return []
             
             # 验证和清理目录数据
-            max_pages = len(reader.pages)  # 使用PDF实际页数
+            max_pages = len(pages)  # 使用PDF实际页数
             full_toc_data = self.validate_toc_data(full_toc_data, max_pages)
             
-            # 去重并保持顺序
-            seen = set()
-            unique_toc_data = []
+            # 优化的去重逻辑：使用字典推导和保持顺序
+            # 使用字典来追踪唯一项（保持插入顺序，Python 3.7+）
+            unique_dict = {}
             for item in full_toc_data:
                 # 使用title和page组合作为唯一标识
                 key = (item['title'], item['page'])
-                if key not in seen:
-                    seen.add(key)
-                    unique_toc_data.append(item)
+                if key not in unique_dict:
+                    unique_dict[key] = item
             
+            unique_toc_data = list(unique_dict.values())
             logger.info(f"所有目录页处理完成，共提取到 {len(unique_toc_data)} 个唯一目录项")
             return unique_toc_data
             
@@ -540,17 +558,15 @@ class TocExtractor:
             
             # 如果提取到数据，进行去重和排序
             if toc_data:
-                # 简单去重（基于标题和页码）
-                unique_toc = []
-                seen = set()
+                # 优化的去重（基于标题和页码）
+                unique_dict = {}
                 for item in toc_data:
                     key = (item['title'], item['page'])
-                    if key not in seen:
-                        seen.add(key)
-                        unique_toc.append(item)
+                    if key not in unique_dict:
+                        unique_dict[key] = item
                 
                 # 按页码排序
-                unique_toc.sort(key=lambda x: x['page'])
+                unique_toc = sorted(unique_dict.values(), key=lambda x: x['page'])
                 
                 logger.info(f"简单文本解析成功提取到 {len(unique_toc)} 个目录项")
                 return unique_toc
@@ -563,7 +579,7 @@ class TocExtractor:
     
     def _parse_llm_response(self, response_text: str) -> List[Dict]:
         """
-        解析LLM响应
+        解析LLM响应，优化版本使用早期退出策略
         
         Args:
             response_text: LLM返回的文本
@@ -572,37 +588,45 @@ class TocExtractor:
             List[Dict]: 解析后的目录数据
         """
         # 记录模型返回的原始结果
-        logger.info(f"LLM模型返回结果前100字符: {response_text[:100]}...")
+        logger.info(f"LLM模型返回结果前100字符: {response_text[:100] if len(response_text) > 100 else response_text}...")
         
         # 预处理：去除首尾空白字符和可能的标记
-        clean_text = response_text.strip()
-        # 移除可能的markdown代码块标记
-        if clean_text.startswith('```') and '\n' in clean_text:
-            # 尝试移除代码块标记
-            lines = clean_text.split('\n')
-            # 移除第一行和最后一行的代码块标记
-            if len(lines) >= 3 and lines[-1].strip() == '```':
-                clean_text = '\n'.join(lines[1:-1])
-            elif len(lines) >= 2:
-                clean_text = '\n'.join(lines[1:])
-            clean_text = clean_text.strip()
+        clean_text = str(response_text).strip()
         
-        # 移除可能的JSON标记文本
+        # 快速检查：如果文本为空，直接返回
+        if not clean_text:
+            logger.error("响应文本为空")
+            return []
+        
+        # 移除可能的markdown代码块标记
+        if clean_text.startswith('```'):
+            lines = clean_text.split('\n', 2)  # 只分割前两次，提高效率
+            if len(lines) >= 2:
+                # 取第一个换行符后的内容
+                first_newline = clean_text.find('\n')
+                if first_newline != -1:
+                    clean_text = clean_text[first_newline + 1:]
+                    # 移除结尾的代码块标记
+                    if clean_text.endswith('```'):
+                        clean_text = clean_text[:-3]
+                    clean_text = clean_text.strip()
+        
+        # 移除可能的JSON标记文本（使用动态长度计算）
         for prefix in ['json\n', 'JSON\n']:
             if clean_text.startswith(prefix):
                 clean_text = clean_text[len(prefix):].strip()
                 break
         
-        # 方法1: 尝试直接解析
+        # 方法1: 尝试直接解析（最快的方式）
         try:
             toc_data = json.loads(clean_text)
             if isinstance(toc_data, list):
                 logger.info("成功直接解析JSON响应")
                 return toc_data
-        except json.JSONDecodeError as e:
-            logger.warning(f"直接解析JSON失败: {e}")
+        except json.JSONDecodeError:
+            pass  # 继续尝试其他方法
         
-        # 方法2: 提取[和]之间的内容
+        # 方法2: 提取[和]之间的内容（次优但更可靠）
         json_start = clean_text.find('[')
         json_end = clean_text.rfind(']')
         if json_start != -1 and json_end != -1 and json_start < json_end:
@@ -612,23 +636,22 @@ class TocExtractor:
                 if isinstance(toc_data, list):
                     logger.info("成功从[和]之间提取JSON")
                     return toc_data
-            except json.JSONDecodeError as e:
-                logger.warning(f"提取的JSON候选解析失败: {e}")
+            except json.JSONDecodeError:
+                pass  # 继续尝试下一个方法
         
-        # 方法3: 使用更复杂的正则表达式匹配JSON数组
-        # 这个正则表达式尝试匹配完整的JSON数组结构
-        json_pattern = r'(\[\s*\{[^}]*\}(\s*,\s*\{[^}]*\})*\s*\])'  # 匹配完整的JSON数组
-        matches = re.findall(json_pattern, clean_text, re.DOTALL)
-        for match_group in matches:
-            # 取第一个捕获组（完整的JSON数组）
-            json_candidate = match_group[0] if isinstance(match_group, tuple) else match_group
+        # 方法3: 使用正则表达式（最后的手段，性能较差）
+        # 限制正则表达式搜索范围，只搜索最可能包含JSON的部分
+        search_text = clean_text[max(0, json_start-10):min(len(clean_text), json_end+10)] if json_start != -1 else clean_text
+        json_pattern = r'\[\s*\{[^}]*\}(?:\s*,\s*\{[^}]*\})*\s*\]'
+        match = re.search(json_pattern, search_text, re.DOTALL)
+        if match:
             try:
-                toc_data = json.loads(json_candidate)
+                toc_data = json.loads(match.group(0))
                 if isinstance(toc_data, list):
                     logger.info("成功通过正则表达式提取JSON")
                     return toc_data
             except json.JSONDecodeError:
-                continue
+                pass
         
         logger.error("所有JSON解析方法均失败")
         return []
@@ -703,16 +726,16 @@ class TocExtractor:
                 logger.warning(f"第{idx+1}项数据类型转换失败: {e}, 项内容: {item}")
                 continue
         
-        # 去重（基于标题和页码的组合）
-        unique_items = []
-        seen = set()
+        # 优化的去重（基于标题和页码的组合）
+        # 使用字典保持插入顺序并高效去重
+        unique_dict = {}
         for item in validated_data:
-            # 创建一个唯一键
-            key = f"{item['title']}:{item['page']}"
-            if key not in seen:
-                seen.add(key)
-                unique_items.append(item)
+            # 创建一个唯一键（使用元组比字符串拼接更高效）
+            key = (item['title'], item['page'])
+            if key not in unique_dict:
+                unique_dict[key] = item
         
+        unique_items = list(unique_dict.values())
         logger.info(f"目录数据验证完成: 原始{len(toc_data)}项 -> 验证后{len(validated_data)}项 -> 去重后{len(unique_items)}项")
         return unique_items
     

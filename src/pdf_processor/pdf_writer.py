@@ -19,6 +19,16 @@ class PDFWriter:
         self.input_file_path = input_file_path
         self.reader = None
         self.writer = None
+    
+    def __enter__(self):
+        """上下文管理器入口"""
+        self.load()
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """上下文管理器出口"""
+        self.close()
+        return False
         
     def load(self) -> bool:
         """

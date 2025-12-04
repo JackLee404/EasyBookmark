@@ -22,6 +22,15 @@ class PDFReader:
         self.num_pages = 0
         if file_path:
             self.load_pdf()
+    
+    def __enter__(self):
+        """上下文管理器入口"""
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """上下文管理器出口"""
+        self.close()
+        return False
         
     def load_pdf(self) -> bool:
         """
@@ -65,8 +74,10 @@ class PDFReader:
             return []
         
         text_list = []
+        # Batch access to pages to avoid repeated attribute lookups
+        pages = self.reader.pages
         for page_num in range(start_page, end_page + 1):
-            page = self.reader.pages[page_num]
+            page = pages[page_num]
             text = page.extract_text()
             text_list.append(text)
         
