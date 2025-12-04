@@ -602,15 +602,20 @@ class TocExtractor:
         if clean_text.startswith('```'):
             lines = clean_text.split('\n', 2)  # 只分割前两次，提高效率
             if len(lines) >= 2:
-                clean_text = lines[1] if len(lines) == 2 else lines[2]
-                # 移除结尾的代码块标记
-                if clean_text.endswith('```'):
-                    clean_text = clean_text[:-3]
-                clean_text = clean_text.strip()
+                # 取第一个换行符后的内容
+                first_newline = clean_text.find('\n')
+                if first_newline != -1:
+                    clean_text = clean_text[first_newline + 1:]
+                    # 移除结尾的代码块标记
+                    if clean_text.endswith('```'):
+                        clean_text = clean_text[:-3]
+                    clean_text = clean_text.strip()
         
-        # 移除可能的JSON标记文本（使用单次检查）
-        if clean_text.startswith(('json\n', 'JSON\n')):
-            clean_text = clean_text[5:].strip()
+        # 移除可能的JSON标记文本（使用动态长度计算）
+        for prefix in ['json\n', 'JSON\n']:
+            if clean_text.startswith(prefix):
+                clean_text = clean_text[len(prefix):].strip()
+                break
         
         # 方法1: 尝试直接解析（最快的方式）
         try:

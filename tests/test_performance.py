@@ -114,8 +114,9 @@ class TestPDFWriterPerformance(unittest.TestCase):
     
     def test_context_manager(self):
         """测试上下文管理器支持"""
-        # 创建一个临时的mock文件路径
-        temp_path = "/tmp/test_pdf.pdf"
+        # 创建一个临时的mock文件路径（跨平台兼容）
+        import tempfile
+        temp_path = tempfile.mktemp(suffix=".pdf")
         writer = PDFWriter(temp_path)
         
         # 测试上下文管理器
