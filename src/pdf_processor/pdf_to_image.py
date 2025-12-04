@@ -31,8 +31,19 @@ class PDFToImageConverter:
         self.file_path = file_path
         self.reader = None
         self.num_pages = 0
+        # Add cache for converted images to avoid redundant conversions
+        self._image_cache = {}
         if file_path:
             self.load_pdf()
+    
+    def __enter__(self):
+        """上下文管理器入口"""
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """上下文管理器出口"""
+        self.close()
+        return False
     
     def load_pdf(self) -> bool:
         """
@@ -68,6 +79,12 @@ class PDFToImageConverter:
             logger.error(f"无效的页码: {page_num}")
             return None
         
+        # Check cache first
+        cache_key = (page_num, dpi)
+        if cache_key in self._image_cache:
+            logger.debug(f"使用缓存的页面 {page_num} 图片")
+            return self._image_cache[cache_key]
+        
         try:
             if PDF2IMAGE_AVAILABLE:
                 # 使用pdf2image库（推荐方式）
@@ -78,8 +95,11 @@ class PDFToImageConverter:
                     img_byte_arr = io.BytesIO()
                     image.save(img_byte_arr, format='PNG')
                     img_byte_arr.seek(0)
+                    img_data = img_byte_arr.getvalue()
+                    # Cache the result
+                    self._image_cache[cache_key] = img_data
                     logger.info(f"成功将页码 {page_num} 转换为图片")
-                    return img_byte_arr.getvalue()
+                    return img_data
             else:
                 # 备选方案：创建空白图片作为示例
                 # 注意：在实际使用时，应安装pdf2image库以获得真实的PDF转图片功能
@@ -107,8 +127,11 @@ class PDFToImageConverter:
                 img_byte_arr = io.BytesIO()
                 image.save(img_byte_arr, format='PNG')
                 img_byte_arr.seek(0)
+                img_data = img_byte_arr.getvalue()
+                # Cache the result
+                self._image_cache[cache_key] = img_data
                 logger.info(f"使用备选方案将页码 {page_num} 转换为示例图片")
-                return img_byte_arr.getvalue()
+                return img_data
                 
         except Exception as e:
             logger.error(f"转换页面 {page_num} 为图片失败: {e}")
@@ -289,3 +312,5 @@ class PDFToImageConverter:
         """关闭资源"""
         self.reader = None
         self.num_pages = 0
+        # Clear cache to free memory
+        self._image_cache.clear()
