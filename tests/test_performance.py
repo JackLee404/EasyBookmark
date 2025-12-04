@@ -114,16 +114,25 @@ class TestPDFWriterPerformance(unittest.TestCase):
     
     def test_context_manager(self):
         """测试上下文管理器支持"""
-        # 创建一个临时的mock文件路径（跨平台兼容）
+        # 创建一个临时的mock文件路径（跨平台兼容，安全）
         import tempfile
-        temp_path = tempfile.mktemp(suffix=".pdf")
-        writer = PDFWriter(temp_path)
+        import os
+        # 使用NamedTemporaryFile创建安全的临时文件
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as temp_file:
+            temp_path = temp_file.name
         
-        # 测试上下文管理器
-        with patch.object(writer, 'load', return_value=True):
-            with writer as w:
-                self.assertIsNotNone(w)
-                self.assertEqual(w, writer)
+        try:
+            writer = PDFWriter(temp_path)
+            
+            # 测试上下文管理器
+            with patch.object(writer, 'load', return_value=True):
+                with writer as w:
+                    self.assertIsNotNone(w)
+                    self.assertEqual(w, writer)
+        finally:
+            # 清理临时文件
+            if os.path.exists(temp_path):
+                os.unlink(temp_path)
 
 
 class TestDeduplicationPerformance(unittest.TestCase):
