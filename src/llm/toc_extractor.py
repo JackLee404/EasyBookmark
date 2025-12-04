@@ -291,13 +291,16 @@ class TocExtractor:
             
             # 初始化完整的目录结果
             full_toc_data = []
+            # 缓存已提取的文本，避免重复提取
+            page_text_cache = {}
+            pages = reader.pages  # 缓存pages引用
             
             # 按顺序处理每个目录页范围
             for idx, (start_page, end_page) in enumerate(page_ranges):
                 logger.info(f"处理目录页范围 {idx+1}/{len(page_ranges)}: 第 {start_page}-{end_page} 页")
                 # 确保页码有效
                 start_page_idx = max(0, start_page - 1)  # 转换为0基索引
-                end_page_idx = min(len(reader.pages) - 1, end_page - 1)
+                end_page_idx = min(len(pages) - 1, end_page - 1)
                 
                 if start_page_idx > end_page_idx:
                     logger.warning(f"无效的页码范围: start={start_page}, end={end_page}")
@@ -306,8 +309,13 @@ class TocExtractor:
                 # 逐页处理每个目录页，类似于图片处理的方式
                 for page_idx in range(start_page_idx, end_page_idx + 1):
                     try:
-                        page = reader.pages[page_idx]
-                        text = page.extract_text()
+                        # 从缓存中获取或提取文本
+                        if page_idx in page_text_cache:
+                            text = page_text_cache[page_idx]
+                        else:
+                            page = pages[page_idx]
+                            text = page.extract_text()
+                            page_text_cache[page_idx] = text
                         
                         if text:
                             logger.info(f"成功提取第{page_idx + 1}页的文本内容，开始使用LLM处理")
@@ -343,16 +351,21 @@ class TocExtractor:
             if not full_toc_data:
                 logger.warning("所有页面LLM处理都未成功提取到目录项，尝试使用简单解析方法")
                 
-                # 重新提取所有页面文本用于备用解析
+                # 使用已缓存的文本，避免重复提取
                 full_toc_text = []
                 for start_page, end_page in page_ranges:
                     start_page_idx = max(0, start_page - 1)
-                    end_page_idx = min(len(reader.pages) - 1, end_page - 1)
+                    end_page_idx = min(len(pages) - 1, end_page - 1)
                     
                     for page_idx in range(start_page_idx, end_page_idx + 1):
                         try:
-                            page = reader.pages[page_idx]
-                            text = page.extract_text()
+                            # 优先使用缓存
+                            if page_idx in page_text_cache:
+                                text = page_text_cache[page_idx]
+                            else:
+                                page = pages[page_idx]
+                                text = page.extract_text()
+                                page_text_cache[page_idx] = text
                             if text:
                                 full_toc_text.append(f"=== 第{page_idx + 1}页 ===\n{text}")
                         except:
@@ -365,7 +378,7 @@ class TocExtractor:
                     return []
             
             # 验证和清理目录数据
-            max_pages = len(reader.pages)  # 使用PDF实际页数
+            max_pages = len(pages)  # 使用PDF实际页数
             full_toc_data = self.validate_toc_data(full_toc_data, max_pages)
             
             # 优化的去重逻辑：使用字典推导和保持顺序
@@ -575,14 +588,14 @@ class TocExtractor:
             List[Dict]: 解析后的目录数据
         """
         # 记录模型返回的原始结果
-        logger.info(f"LLM模型返回结果前100字符: {response_text[:100]}...")
+        logger.info(f"LLM模型返回结果前100字符: {response_text[:100] if len(response_text) > 100 else response_text}...")
         
         # 预处理：去除首尾空白字符和可能的标记
-        clean_text = response_text.strip()
+        clean_text = str(response_text).strip()
         
-        # 快速检查：如果不包含必要的JSON结构，直接返回
-        if '[' not in clean_text or ']' not in clean_text:
-            logger.error("响应文本中不包含JSON数组结构")
+        # 快速检查：如果文本为空，直接返回
+        if not clean_text:
+            logger.error("响应文本为空")
             return []
         
         # 移除可能的markdown代码块标记

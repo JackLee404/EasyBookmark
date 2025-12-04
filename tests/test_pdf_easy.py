@@ -84,7 +84,7 @@ class TestTocExtractor(unittest.TestCase):
         """测试从文本提取目录"""
         # 设置mock返回值
         mock_instance = MagicMock()
-        # 模拟__call__方法而不是invoke方法
+        # 模拟invoke方法返回值
         mock_response = MagicMock()
         mock_response.content = '''
         [
@@ -93,7 +93,8 @@ class TestTocExtractor(unittest.TestCase):
             {"title": "第二章 实现", "page": 5, "level": 1}
         ]
         '''
-        mock_instance.return_value = mock_response
+        # 修正：设置invoke方法的返回值
+        mock_instance.invoke.return_value = mock_response
         mock_chat_openai_class.return_value = mock_instance
         
         extractor = TocExtractor(api_key="test_key")
