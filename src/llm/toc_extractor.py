@@ -1,7 +1,11 @@
 # -*- coding: utf-8 -*-
 """目录提取器模块"""
 
+import base64
+import mimetypes
+import os
 import re
+import sys
 import json
 from typing import List, Dict, Optional, Tuple
 from langchain_openai import ChatOpenAI
@@ -26,6 +30,8 @@ class TocExtractor:
         self.model_name = model_name
         self.base_url = base_url
         self.llm = None
+        # None 表示尚未探测；探测结果会缓存，避免每个目录页重复发送测试请求。
+        self._multimodal_supported: Optional[bool] = None
         # 导入PdfReader用于从PDF直接提取文本
         try:
             from pypdf import PdfReader
@@ -59,6 +65,90 @@ class TocExtractor:
         except Exception as e:
             logger.error(f"初始化LLM失败: {e}")
             return False
+
+    def _get_multimodal_test_image(self, test_image_path: str = None) -> Optional[str]:
+        """定位用于探测视觉能力的测试图片。"""
+        if test_image_path:
+            return test_image_path if os.path.isfile(test_image_path) else None
+
+        # PyInstaller 运行时资源位于 _MEIPASS；开发环境资源位于项目根目录。
+        bundle_root = getattr(sys, "_MEIPASS", None)
+        project_root = bundle_root or os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+        candidates = [
+            os.path.join(project_root, "assets", "dog.jpg"),
+            os.path.join(os.getcwd(), "assets", "dog.jpg"),
+        ]
+        return next((path for path in candidates if os.path.isfile(path)), None)
+
+    @staticmethod
+    def _response_text(content) -> str:
+        """把 LangChain 响应内容转换为可用于日志和探测判断的文本。"""
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            parts = []
+            for item in content:
+                if isinstance(item, str):
+                    parts.append(item)
+                elif isinstance(item, dict) and item.get("type") == "text":
+                    parts.append(str(item.get("text", "")))
+            return " ".join(parts)
+        return str(content or "")
+
+    @staticmethod
+    def _probe_response_confirms_dog(response_text: str) -> bool:
+        """判断测试响应是否确认看到了 dog.jpg 中的狗。"""
+        normalized = response_text.strip().lower()
+        if not normalized:
+            return False
+        # 先排除明确的否定回答，避免“no dog”同时命中 dog。
+        if re.search(r"\bno\b|没有|不是|否定", normalized):
+            return False
+        return bool(re.search(r"\byes\b|是的|有一只|\bdog\b|puppy|canine|retriever|狗|犬", normalized))
+
+    def check_multimodal_support(self, test_image_path: str = None, force: bool = False) -> bool:
+        """通过发送 dog.jpg 实际探测当前 API/model 是否支持图片输入。"""
+        if self._multimodal_supported is not None and not force:
+            return self._multimodal_supported
+
+        if not self.llm and not self.initialize():
+            self._multimodal_supported = False
+            return False
+
+        image_path = self._get_multimodal_test_image(test_image_path)
+        if not image_path:
+            logger.warning("找不到多模态测试图片 assets/dog.jpg，跳过图片能力测试")
+            self._multimodal_supported = False
+            return False
+
+        try:
+            with open(image_path, "rb") as image_file:
+                encoded_image = base64.b64encode(image_file.read()).decode("ascii")
+            mime_type = mimetypes.guess_type(image_path)[0] or "image/jpeg"
+            probe_prompt = [
+                {
+                    "type": "text",
+                    "text": "如果图片中有狗，只回复 YES；如果没有狗，只回复 NO。不要解释。",
+                },
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:{mime_type};base64,{encoded_image}"},
+                },
+            ]
+            response = self.llm.invoke([HumanMessage(content=probe_prompt)])
+            response_text = self._response_text(getattr(response, "content", response))
+            self._multimodal_supported = self._probe_response_confirms_dog(response_text)
+            if self._multimodal_supported:
+                logger.info(f"多模态能力测试通过: {self.model_name}")
+            else:
+                logger.warning(
+                    f"多模态能力测试未通过: {self.model_name}，模型响应={response_text[:120]!r}"
+                )
+        except Exception as e:
+            self._multimodal_supported = False
+            logger.warning(f"多模态能力测试失败: {self.model_name}: {e}")
+
+        return self._multimodal_supported
     
     def extract_toc_from_text_with_images(self, toc_text: str, pdf_file_path: str, page_ranges: List[Tuple[int, int]], page_offset: int = 0) -> List[Dict]:
         """
@@ -77,6 +167,11 @@ class TocExtractor:
         if not self.llm:
             if not self.initialize():
                 return []
+
+        # 使用实际图片请求判断能力，不再根据模型名称中的 vl/omni 等字符串猜测。
+        if not self.check_multimodal_support():
+            logger.info("当前模型未通过多模态测试，使用纯文本方式处理")
+            return self.extract_toc_from_pdf_toc_pages(pdf_file_path, page_ranges, page_offset)
         
         try:
             # 创建PDF转图片转换器
@@ -139,10 +234,8 @@ class TocExtractor:
                 try:
                     logger.info(f"开始使用LLM处理目录页范围 {idx+1} 的目录")
                     
-                    # 对于支持多模态的模型，使用HumanMessage多模态格式
-                    # 支持GPT-4系列和通义千问多模态模型
-                    if self.model_name.startswith("gpt-4") or "omni" in self.model_name.lower() or "vl" in self.model_name.lower():
-                        # GPT-4 Vision和通义千问多模态模型支持多模态
+                    # 通过图片能力测试后，使用HumanMessage多模态格式
+                    if self.check_multimodal_support():
                         response = self.llm.invoke([
                             SystemMessage(content=system_prompt),
                             HumanMessage(content=human_prompt)
@@ -403,8 +496,19 @@ class TocExtractor:
     _extract_toc_from_text_with_images_impl = extract_toc_from_text_with_images
     # 保留原始方法名作为向后兼容接口
     extract_toc_from_text_with_images_legacy = _extract_toc_from_text_with_images_impl
-    # 设置原始方法名指向兼容方法，确保现有代码调用不会出错
-    extract_toc_from_text_with_images = _extract_toc_from_text_with_images_legacy
+    def extract_toc_from_text_with_images(self, toc_text: str, pdf_file_path: str,
+                                          page_ranges, page_offset: int = 0) -> List[Dict]:
+        """兼容单个页码范围和页码范围列表两种调用方式。"""
+        # 旧调用方式传入 (start_page, end_page) 两个整数；新接口传入
+        # [(start_page, end_page)]，统一转换后交给原始实现。
+        if isinstance(page_ranges, int):
+            page_ranges = [(page_ranges, page_offset)]
+            page_offset = 0
+        elif isinstance(page_ranges, tuple) and len(page_ranges) == 2:
+            page_ranges = [page_ranges]
+        return self._extract_toc_from_text_with_images_impl(
+            toc_text, pdf_file_path, page_ranges, page_offset
+        )
     
     def extract_toc_from_text(self, toc_text: str, page_offset: int = 0) -> List[Dict]:
         """
@@ -725,3 +829,4 @@ class TocExtractor:
         """
         self.api_key = api_key
         self.llm = None  # 重置LLM，下次调用时重新初始化
+        self._multimodal_supported = None

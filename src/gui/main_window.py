@@ -93,7 +93,7 @@ class WorkerThread(QThread):
         else:
             # 尝试使用图片辅助方式提取目录
             toc_data = toc_extractor.extract_toc_from_text_with_images(
-                toc_text, file_path, start_page, end_page
+                toc_text, file_path, [(start_page, end_page)]
             )
             
             if not toc_data:
